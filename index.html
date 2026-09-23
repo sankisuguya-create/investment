@@ -1,0 +1,836 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>投資指標ワークベンチ</title>
+<style>
+:root{
+  --bg:#f6f7f9; --panel:#fff; --ink:#1b1e24; --sub:#5b6470; --line:#dfe3e8;
+  --acc:#1f6fd6; --acc-soft:#e8f1fc; --good:#0a7d4f; --warn:#b45309; --bad:#c23030;
+  --radius:10px; --fs:14px;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:var(--fs)/1.6 -apple-system,"Hiragino Kaku Gothic ProN","Noto Sans JP",system-ui,sans-serif}
+header{background:var(--panel);border-bottom:1px solid var(--line);padding:10px 16px;display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+header h1{font-size:17px;margin:0}
+header .sub{color:var(--sub);font-size:12px}
+nav{display:flex;gap:4px;background:var(--panel);border-bottom:1px solid var(--line);padding:0 8px;overflow-x:auto}
+nav button{border:0;background:none;padding:10px 14px;font-size:14px;color:var(--sub);border-bottom:2px solid transparent;cursor:pointer;white-space:nowrap}
+nav button.on{color:var(--acc);border-bottom-color:var(--acc);font-weight:600}
+main{max-width:1120px;margin:0 auto;padding:16px}
+section.screen{display:none}
+section.screen.on{display:block}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px;margin-bottom:14px}
+.panel>h2,.panel>h3{margin:0 0 10px;font-size:15px}
+.panel .note{color:var(--sub);font-size:12px;margin-top:6px}
+.grid{display:grid;gap:14px}
+.grid.c2{grid-template-columns:1fr 1fr}
+.grid.c4{grid-template-columns:repeat(4,1fr)}
+@media(max-width:860px){.grid.c2,.grid.c4{grid-template-columns:1fr}}
+.kpi{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:10px 14px}
+.kpi .l{color:var(--sub);font-size:12px}
+.kpi .v{font-size:20px;font-weight:700;font-variant-numeric:tabular-nums}
+.kpi .d{font-size:11px;color:var(--sub)}
+.badge{display:inline-block;padding:2px 9px;border-radius:99px;font-size:12px;font-weight:600}
+.badge.g{background:#e5f5ee;color:var(--good)}
+.badge.w{background:#fdf0e0;color:var(--warn)}
+.badge.b{background:#fbe7e7;color:var(--bad)}
+.badge.n{background:#eef0f3;color:var(--sub)}
+table.t{border-collapse:collapse;width:100%;font-size:13px}
+table.t th,table.t td{border-bottom:1px solid var(--line);padding:7px 9px;text-align:left;vertical-align:top}
+table.t thead th{color:var(--sub);font-weight:600;background:#fafbfc}
+table.t tr.clickable{cursor:pointer}
+table.t tr.clickable:hover{background:var(--acc-soft)}
+.num{text-align:right;font-variant-numeric:tabular-nums}
+input[type=text],input[type=number],input[type=file],select,textarea{font:inherit;padding:7px 9px;border:1px solid var(--line);border-radius:7px;background:#fff;color:var(--ink);max-width:100%}
+textarea{width:100%;min-height:70px}
+.btn{display:inline-block;border:1px solid var(--line);background:#fff;border-radius:7px;padding:8px 14px;font-size:14px;cursor:pointer;color:var(--ink)}
+.btn:hover{background:#f2f5f8}
+.btn.acc{background:var(--acc);border-color:var(--acc);color:#fff}
+.btn.acc:hover{background:#1a5fb8}
+.btn.sm{padding:4px 10px;font-size:12px}
+.btn.danger{color:var(--bad)}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.row>*{min-width:0}
+label.f{display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--sub)}
+label.f input,label.f select{color:var(--ink);font-size:14px}
+.check{display:flex;gap:8px;align-items:flex-start;font-size:14px;padding:5px 0}
+.check input{margin-top:4px}
+.hr{border:0;border-top:1px solid var(--line);margin:14px 0}
+.muted{color:var(--sub)}
+.small{font-size:12px}
+.chart{width:100%;height:auto;display:block}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--sub);margin-top:4px}
+.legend .sw{display:inline-block;width:12px;height:3px;border-radius:2px;vertical-align:middle;margin-right:4px}
+.warnline{background:#fdf0e0;border:1px solid #f0d9b8;color:var(--warn);border-radius:8px;padding:8px 12px;font-size:13px;margin:10px 0}
+details{border:1px solid var(--line);border-radius:8px;padding:8px 12px;background:#fff}
+details summary{cursor:pointer;font-weight:600}
+footer{color:var(--sub);font-size:11px;text-align:center;padding:18px}
+</style>
+</head>
+<body>
+<header>
+  <h1>投資指標ワークベンチ</h1>
+  <span class="sub">指標の発見 → 統計検証 → ストラテジー評価（個人専用・データは端末内のみ）</span>
+  <span class="row" style="margin-left:auto">
+    <button class="btn sm" id="btnExport">JSON書出</button>
+    <button class="btn sm" id="btnImport">JSON読込</button>
+    <input type="file" id="importJson" accept=".json" hidden>
+  </span>
+</header>
+<nav id="nav">
+  <button data-s="data" class="on">データ</button>
+  <button data-s="ind">指標</button>
+  <button data-s="ana">分析</button>
+  <button data-s="cmp">比較</button>
+  <button data-s="str">ストラテジー</button>
+  <button data-s="gui">ガイド</button>
+</nav>
+<main>
+  <section class="screen on" id="s-data"></section>
+  <section class="screen" id="s-ind"></section>
+  <section class="screen" id="s-ana"></section>
+  <section class="screen" id="s-cmp"></section>
+  <section class="screen" id="s-str"></section>
+  <section class="screen" id="s-gui"></section>
+</main>
+<footer>検証ツールであり、売買の推奨はしません。方法論の出典: we.love-profit.com「シストレのススメ」</footer>
+<script>
+'use strict';
+/* ============================== utils ============================== */
+const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmt=(v,d=3)=>v==null||!isFinite(v)?'—':Number(v).toFixed(d);
+const pct=(v,d=2)=>v==null||!isFinite(v)?'—':(v*100).toFixed(d)+'%';
+const uid=()=> 'x'+Math.random().toString(36).slice(2,9);
+const debounce=(f,t=200)=>{let h;return(...a)=>{clearTimeout(h);h=setTimeout(()=>f(...a),t)}};
+
+/* ============================== stats ============================== */
+const mean=a=>a.reduce((s,v)=>s+v,0)/a.length;
+const stdev=a=>{const m=mean(a);return Math.sqrt(a.reduce((s,v)=>s+(v-m)*(v-m),0)/(a.length-1))};
+function pearson(x,y){const n=x.length,mx=mean(x),my=mean(y);let sxy=0,sx=0,sy=0;
+  for(let i=0;i<n;i++){const dx=x[i]-mx,dy=y[i]-my;sxy+=dx*dy;sx+=dx*dx;sy+=dy*dy}
+  return (sx===0||sy===0)?0:sxy/Math.sqrt(sx*sy)}
+function ranks(a){const ix=a.map((v,i)=>[v,i]).sort((p,q)=>p[0]-q[0]);const r=new Array(a.length);
+  for(let i=0;i<ix.length;i++){let j=i;while(j+1<ix.length&&ix[j+1][0]===ix[i][0])j++;
+    const avg=(i+j)/2+1;for(let k=i;k<=j;k++)r[ix[k][1]]=avg;i=j}return r}
+const spearman=(x,y)=>pearson(ranks(x),ranks(y));
+function ols(x,y){const n=x.length,mx=mean(x),my=mean(y);let sxy=0,sxx=0;
+  for(let i=0;i<n;i++){sxy+=(x[i]-mx)*(y[i]-my);sxx+=(x[i]-mx)*(x[i]-mx)}
+  const b=sxx===0?0:sxy/sxx,a=my-b*mx;let sse=0;for(let i=0;i<n;i++){const e=y[i]-(a+b*x[i]);sse+=e*e}
+  return{b,a,r2:pearson(x,y)**2,sse,syx:Math.sqrt(sse/(n-2)),sxx,mx}}
+const zscore=a=>{const m=mean(a),s=stdev(a)||1;return a.map(v=>(v-m)/s)};
+function erf(z){const t=1/(1+.2316419*Math.abs(z)),d=.3989423*Math.exp(-z*z/2);
+  let p=d*t*(.3193815+t*(-.3565638+t*(1.781478+t*(-1.821256+t*1.330274))));
+  return z>0?1-p:p}
+const normCdf=z=>erf(z/Math.SQRT2);
+const tCdf=(t,v)=>{const z=t*(1-1/(4*v))/Math.sqrt(1+t*t/(2*v));return normCdf(z)};
+const icPval=(r,n)=>n<3||Math.abs(r)>=1?0:2*(1-tCdf(Math.abs(r*Math.sqrt((n-2)/(1-r*r))),n-2));
+function histogram(a,bins=20){const mn=Math.min(...a),mx=Math.max(...a),w=(mx-mn)/bins||1;
+  const c=new Array(bins).fill(0);for(const v of a){let i=Math.floor((v-mn)/w);if(i>=bins)i=bins-1;if(i<0)i=0;c[i]++}
+  return{c,mn,w}}
+function quantiles(x,y,k=10){const ix=x.map((v,i)=>i).sort((p,q)=>x[p]-x[q]);const g=[];
+  for(let i=0;i<k;i++){const sl=ix.slice(Math.floor(i*ix.length/k),Math.floor((i+1)*ix.length/k));
+    g.push({i:i+1,n:sl.length,m:sl.length?mean(sl.map(j=>y[j])):0})}return g}
+function cumCurve(z,r,longT,shortT){let eq=1;const curve=[],pos=[];let trades=0;
+  for(let i=0;i<z.length;i++){const p=z[i]>longT?1:z[i]<-shortT?-1:0;pos.push(p);if(p!==0)trades++;
+    eq*=(1+p*r[i]);curve.push(eq)}return{curve,pos,trades}}
+function maxDD(curve){let peak=curve[0]||1,dd=0;for(const v of curve){if(v>peak)peak=v;const d=(peak-v)/peak;if(d>dd)dd=d}return dd}
+function rollingCorr(x,y,w){const out=[];for(let i=0;i<x.length;i++){
+  if(i<w){out.push(null);continue}out.push(pearson(x.slice(i-w,i),y.slice(i-w,i)))}return out}
+const median=a=>{const s=[...a].sort((p,q)=>p-q);const m=s.length>>1;return s.length%2?s[m]:(s[m-1]+s[m])/2};
+
+/* ============================== CSV ============================== */
+function parseCSV(text){
+  const rows=[];let cur=[''],f=0,q=false;
+  for(let i=0;i<text.length;i++){const c=text[i];
+    if(q){if(c==='"'){if(text[i+1]==='"'){cur[f]+='"';i++}else q=false}else cur[f]+=c}
+    else if(c==='"')q=true;
+    else if(c===','){cur.push('');f++}
+    else if(c==='\n'||c==='\r'){if(c==='\r'&&text[i+1]==='\n')i++;
+      if(cur.length>1||cur[0].trim()!=='')rows.push(cur);cur=[''];f=0}
+    else cur[f]+=c}
+  if(cur.length>1||cur[0].trim()!=='')rows.push(cur);
+  return rows.filter(r=>r.length>1);
+}
+function parseDate(s){
+  s=String(s).trim().replace(/"/g,'');
+  let m=s.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/);           // 2023/01/04, 2023-01-04
+  if(m)return`${m[1]}-${m[2].padStart(2,'0')}-${m[3].padStart(2,'0')}`;
+  m=s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);                      // 01/04/2023 (CBOE)
+  if(m)return`${m[3]}-${m[1].padStart(2,'0')}-${m[2].padStart(2,'0')}`;
+  m=s.match(/^(\d{4})年(\d{1,2})月(\d{1,2})日/);
+  if(m)return`${m[1]}-${m[2].padStart(2,'0')}-${m[3].padStart(2,'0')}`;
+  return null;
+}
+const num=v=>{v=String(v).trim().replace(/["',]/g,'');if(v===''||v==='-'||/円|%$/.test(v))return null;
+  const n=Number(v.replace(/%$/,''));return isFinite(n)?n:null};
+function sniffDelim(headerLine){return headerLine.includes('\t')?'\t':','}
+function csvToDataset(name,text){
+  text=text.replace(/^﻿/,'');
+  const raw=parseCSV(text);
+  if(!raw.length)throw new Error('行がありません');
+  const hdr=raw[0].map(h=>h.trim().replace(/^"|"$/g,''));
+  const dataRows=raw.slice(1).map(r=>hdr.map((_,i)=>(r[i]??'').trim()));
+  // date column: first col where >50% parse as date
+  let dateCol=-1;
+  for(let c=0;c<hdr.length;c++){const ok=dataRows.filter(r=>parseDate(r[c])).length;
+    if(ok>dataRows.length*0.5){dateCol=c;break}}
+  if(dateCol<0)throw new Error('日付列が見つかりません');
+  const cols=[];
+  hdr.forEach((h,c)=>{if(c===dateCol)return;
+    const nums=dataRows.filter(r=>num(r[c])!=null).length;
+    if(nums>dataRows.length*0.3)cols.push({key:'c'+c,label:h||('列'+c)})});
+  if(!cols.length)throw new Error('数値列が見つかりません');
+  const rows=[];
+  for(const r of dataRows){const d=parseDate(r[dateCol]);if(!d)continue;
+    const vals={};for(const c of cols)vals[c.key]=num(r[+c.key.slice(1)]);
+    rows.push({date:d,vals})}
+  rows.sort((a,b)=>a.date<b.date?-1:1);
+  const seen=new Set(),dedup=rows.filter(r=>!seen.has(r.date)&&seen.add(r.date));
+  return{id:uid(),name,cols,rows:dedup};
+}
+
+/* ============================== events ============================== */
+const evNum=v=>{v=String(v??'').trim().replace(/["',]/g,'');
+  const m=v.match(/^(-?[\d.]+)\s*([KMBT])?%?$/i);if(!m)return null;
+  const mult={k:1e3,m:1e6,b:1e9,t:1e12}[(m[2]||'').toLowerCase()]||1;
+  const n=Number(m[1])*mult;return isFinite(n)?n:null};
+function evTime(s){ // "2:00pm" -> "14:00" ; "All Day"/"" -> ''
+  s=String(s||'').trim();const m=s.match(/^(\d{1,2}):(\d{2})\s*(am|pm)?/i);if(!m)return'';
+  let h=+m[1];if(m[3]){if(/p/i.test(m[3])&&h<12)h+=12;if(/a/i.test(m[3])&&h===12)h=0}
+  return String(h).padStart(2,'0')+':'+m[2]}
+function parseEventDate(s){ // -> {d:'YYYY-MM-DD',t:'HH:MM'}
+  s=String(s??'').trim();
+  let m=s.match(/^(\d{2})\/(\d{1,2})\/(\d{1,2})(?:\s+(\d{1,2}):(\d{2}))?/);      // YY/M/D H:MM (ForexFactory系CSV)
+  if(m)return{d:`20${m[1]}-${m[2].padStart(2,'0')}-${m[3].padStart(2,'0')}`,t:m[4]?`${m[4].padStart(2,'0')}:${m[5]}`:''};
+  m=s.match(/^(\d{1,2})-(\d{1,2})-(\d{4})(?:\s+(.*))?$/);                         // MM-DD-YYYY (FF xml)
+  if(m)return{d:`${m[3]}-${m[1].padStart(2,'0')}-${m[2].padStart(2,'0')}`,t:evTime(m[4])};
+  m=s.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})(?:[T\s]+(\d{1,2}):(\d{2}))?/);
+  if(m)return{d:`${m[1]}-${m[2].padStart(2,'0')}-${m[3].padStart(2,'0')}`,t:m[4]?`${m[4].padStart(2,'0')}:${m[5]}`:''};
+  const d=parseDate(s);return{d:d||'',t:''};
+}
+const impNum=v=>{v=String(v??'').trim().toLowerCase();
+  if(v==='3'||v==='high'||v==='高')return 2;
+  if(v==='2'||v==='medium'||v==='med'||v==='中')return 1;
+  return 0}; // '0','1','low','低','holiday' → 低
+function parseEvents(name,text){
+  text=String(text).replace(/^﻿/,'').trim();
+  const evs=[];
+  if(text.startsWith('<')){ // ForexFactory週次XML
+    const doc=new DOMParser().parseFromString(text,'text/xml');
+    doc.querySelectorAll('event').forEach(e=>{
+      const g=t=>(e.querySelector(t)?.textContent||'').trim();
+      const{d}=parseEventDate(g('date'));if(!d)return;
+      const imp=g('impact');if(/holiday/i.test(imp))return;
+      evs.push({d,t:evTime(g('time')),cur:g('country').toUpperCase(),imp:impNum(imp),
+        title:g('title'),f:evNum(g('forecast')),a:evNum(g('actual')),p:evNum(g('previous')),src:name})});
+  }else{
+    const raw=parseCSV(text);if(raw.length<2)throw new Error('行がありません');
+    const hdr=raw[0].map(h=>h.trim().toLowerCase());
+    const col=re=>hdr.findIndex(h=>re.test(h));
+    const ci={date:col(/^(date|timeofevent|日付|日時|datetime)/),title:col(/title|event|イベント|指標|name/),
+      cur:col(/currency|country|cur|通貨|国/),imp:col(/impact|重要/),f:col(/forcast|forecast|予想|consensus/),
+      a:col(/actual|結果|実績/),p:col(/previous|prior|前回/)};
+    if(ci.date<0){for(let c=0;c<hdr.length;c++){const ok=raw.slice(1,50).filter(r=>parseEventDate(r[c]).d).length;
+      if(ok>Math.min(raw.length-1,49)*0.6){ci.date=c;break}}}
+    if(ci.date<0)throw new Error('日付列が見つかりません');
+    for(const r of raw.slice(1)){
+      const{d,t}=parseEventDate(r[ci.date]);if(!d)continue;
+      const title=ci.title>=0?String(r[ci.title]||'').trim():name;
+      if(!title||/holiday/i.test(title))continue;
+      evs.push({d,t,cur:ci.cur>=0?String(r[ci.cur]||'').trim().toUpperCase():'',imp:ci.imp>=0?impNum(r[ci.imp]):0,
+        title,f:ci.f>=0?evNum(r[ci.f]):null,a:ci.a>=0?evNum(r[ci.a]):null,p:ci.p>=0?evNum(r[ci.p]):null,src:name})}
+  }
+  if(!evs.length)throw new Error('イベントが見つかりません');
+  return evs;
+}
+function addEvents(name,text){
+  const evs=parseEvents(name,text);
+  const seen=new Set(S.events.map(e=>e.d+'|'+e.t+'|'+e.cur+'|'+e.title));let n=0;
+  for(const e of evs){const k=e.d+'|'+e.t+'|'+e.cur+'|'+e.title;if(!seen.has(k)){seen.add(k);S.events.push(e);n++}}
+  S.events.sort((a,b)=>a.d<b.d?-1:a.d>b.d?1:a.t<b.t?-1:1);return n;
+}
+const evCurs=()=>[...new Set(S.events.map(e=>e.cur).filter(Boolean))].sort();
+const evTitles=()=>[...new Set(S.events.map(e=>e.title))].sort();
+function matchEvents(flt){
+  const txt=(flt?.text||'').trim().toLowerCase();
+  return S.events.filter(e=>(!txt||e.title.toLowerCase().includes(txt))&&(!flt?.cur||e.cur===flt.cur)&&(e.imp>=(flt?.minImp||0)));
+}
+function tradeIdx(dates,date){ // dates: sorted 'YYYY-MM-DD'[] -> first index with dates[i]>=date
+  let lo=0,hi=dates.length;while(lo<hi){const m=(lo+hi)>>1;if(dates[m]<date)lo=m+1;else hi=m}
+  return lo<dates.length?lo:-1;
+}
+/* イベント集計: 該当イベント日(直近取引日)のリターン vs 全日の平均（Welch t検定） */
+function eventStudy(flt,h){
+  const rows=timeline();const tcol=S.target.col?colKey(S.target.ds,S.target.col):null;
+  const ret=targetReturn(rows,tcol,h);const dates=rows.map(r=>r.date);
+  const evs=matchEvents(flt);const evIdx=new Set(),recs=[];
+  for(const e of evs){const i=tradeIdx(dates,e.d);if(i<0||ret[i]==null)continue;
+    evIdx.add(i);recs.push({e,tdate:dates[i],ret:ret[i]})}
+  const evR=recs.map(r=>r.ret);
+  const baseR=ret.filter((v,i)=>v!=null&&!evIdx.has(i));
+  let welch=null;
+  if(evR.length>=3&&baseR.length>=3){
+    const v1=evR.length>1?stdev(evR)**2:0,v2=stdev(baseR)**2;
+    const se=Math.sqrt(v1/evR.length+v2/baseR.length)||1e-9;
+    const t=Math.abs((mean(evR)-mean(baseR))/se);
+    const df=Math.max(1,(v1/evR.length+v2/baseR.length)**2/((v1/evR.length)**2/Math.max(1,evR.length-1)+(v2/baseR.length)**2/Math.max(1,baseR.length-1)));
+    welch={t,p:2*(1-tCdf(t,df))};
+  }
+  return{recs,evR,baseR,m:evR.length?mean(evR):null,bm:baseR.length?mean(baseR):null,
+    win:evR.length?evR.filter(v=>v>0).length/evR.length:null,welch,n:recs.length,total:evs.length};
+}
+/* イベント由来の指標系列 */
+function evSeries(ind){
+  const dates=timeline().map(r=>r.date);if(!dates.length)return[];
+  const evs=matchEvents(ind.flt);
+  if(ind.kind==='ev_surp'){
+    const byT=new Map();
+    for(const e of evs){if(e.f==null||e.a==null)continue;
+      if(!byT.has(e.title))byT.set(e.title,[]);byT.get(e.title).push(e)}
+    const out=[];
+    for(const list of byT.values()){
+      const surp=list.map(e=>e.a-e.f);const m=mean(surp),s=stdev(surp)||1;
+      list.forEach((e,i)=>{const j=tradeIdx(dates,e.d);if(j>=0)out.push({date:dates[j],v:(surp[i]-m)/s})})}
+    return out.sort((a,b)=>a.date<b.date?-1:1);
+  }
+  const idxSet=new Set();
+  for(const e of evs){const j=tradeIdx(dates,e.d);if(j>=0)idxSet.add(j)}
+  const out=[];
+  if(ind.kind==='ev_dum'){for(let i=0;i<dates.length;i++)out.push({date:dates[i],v:idxSet.has(i)?1:0});return out}
+  const cap=(ind.params&&ind.params.cap)||30;
+  for(let i=0;i<dates.length;i++){let v=cap;
+    if(ind.kind==='ev_until'){for(let j=i;j<dates.length&&j-i<=cap;j++)if(idxSet.has(j)){v=j-i;break}}
+    else if(ind.kind==='ev_since'){for(let j=i;j>=0&&i-j<=cap;j--)if(idxSet.has(j)){v=i-j;break}}
+    out.push({date:dates[i],v})}
+  return out;
+}
+
+/* ============================== state ============================== */
+const S={
+  datasets:[], events:[], indicators:[], target:{ds:null,col:null}, horizon:1, fill:true,
+  th:{long:1,short:1}, rollW:60, goal:{cap:100,yld:10,dd:10},
+  checks:{}, memos:{}, adopted:{}, evSaveFail:false,
+};
+function persist(){
+  try{const ev=S.events;S.events=[];localStorage.setItem('invbench.v1',JSON.stringify(S));S.events=ev}catch(e){}}
+function persistEv(){
+  try{localStorage.setItem('invbench.ev1',JSON.stringify(S.events));S.evSaveFail=false}
+  catch(e){S.evSaveFail=true;console.warn('イベント保存容量超過: JSON書出で退避してください')}}
+function restore(){
+  try{const s=localStorage.getItem('invbench.v1');if(!s)return;const o=JSON.parse(s);Object.assign(S,o)}catch(e){}
+  try{const s2=localStorage.getItem('invbench.ev1');if(s2)S.events=JSON.parse(s2)}catch(e){}}
+
+/* column key -> series [{date,v}] over unified timeline */
+function colKey(dsId,col){return dsId+'::'+col}
+function allCols(){const out=[];for(const d of S.datasets)for(const c of d.cols)out.push({key:colKey(d.id,c.key),label:`${d.name}.${c.label}`,ds:d.id,col:c.key});return out}
+function timeline(){
+  const map=new Map();
+  for(const d of S.datasets)for(const r of d.rows){
+    const o=map.get(r.date)||{date:r.date};
+    for(const c of d.cols)o[colKey(d.id,c.key)]=r.vals[c.key];
+    map.set(r.date,o)}
+  const rows=[...map.values()].sort((a,b)=>a.date<b.date?-1:1);
+  if(S.fill){const last={};for(const r of rows){for(const k of Object.keys(r))if(k!=='date')last[k]=r[k];for(const k in last)if(r[k]==null)r[k]=last[k]}}
+  return rows;
+}
+function seriesOf(key){const[ds,col]=key.split('::');const d=S.datasets.find(x=>x.id===ds);if(!d)return[];
+  return d.rows.map(r=>({date:r.date,v:r.vals[col]})).filter(p=>p.v!=null)}
+/* forward return of target close over h trading days */
+function targetReturn(rows,tcol,h){const out=[];
+  for(let i=0;i<rows.length;i++){const a=rows[i][tcol],b=rows[i+h]&&rows[i+h][tcol];
+    out.push(a!=null&&b!=null?b/a-1:null)}return out}
+
+/* ============================== indicators ============================== */
+const IND_TYPES={
+  column:{name:'CSV列のまま',params:[],desc:'取込んだ列をそのまま指標に（例:日経平均VIの終値）'},
+  ma_dev:{name:'移動平均乖離率',params:[['period',25]],desc:'終値÷N日移動平均−1'},
+  mom:{name:'騰落率（モメンタム）',params:[['period',10]],desc:'N日前からの騰落率'},
+  vol:{name:'ボラティリティ',params:[['period',20]],desc:'日次リターンのN日標準偏差'},
+  rsi:{name:'RSI',params:[['period',14]],desc:'N日RSI（0〜100）'},
+  ev_surp:{name:'イベント・サプライズ',params:[],ev:true,desc:'発表の「結果−予想」をタイトル毎に正規化したイベント日の値'},
+  ev_dum:{name:'イベント・当日ダミー',params:[],ev:true,desc:'該当イベントの当日（直近取引日）=1・他=0。点推定の解釈はイベント集計で'},
+  ev_until:{name:'イベント・次回まで日数',params:[['cap',30]],ev:true,desc:'次の該当イベントまでの取引日数（cap日で打切り）'},
+  ev_since:{name:'イベント・前回から日数',params:[['cap',30]],ev:true,desc:'直近の該当イベントからの取引日数（cap日で打切り）'},
+};
+function indSeries(ind){
+  if(ind.kind==='column')return seriesOf(ind.src);
+  if(IND_TYPES[ind.kind]&&IND_TYPES[ind.kind].ev)return evSeries(ind);
+  const base=seriesOf(ind.src);const p=ind.params.period||14;const closes=base.map(x=>x.v);
+  const out=[];
+  for(let i=0;i<base.length;i++){let v=null;
+    if(ind.kind==='ma_dev'&&i>=p){const m=mean(closes.slice(i-p,i));v=closes[i]/m-1}
+    else if(ind.kind==='mom'&&i>=p){v=closes[i]/closes[i-p]-1}
+    else if(ind.kind==='vol'&&i>=p){const rets=[];for(let j=i-p+1;j<=i;j++)rets.push(closes[j]/closes[j-1]-1);v=stdev(rets)}
+    else if(ind.kind==='rsi'&&i>=p){let up=0,dn=0;for(let j=i-p+1;j<=i;j++){const d=closes[j]-closes[j-1];if(d>0)up+=d;else dn-=d}v=dn===0?100:up/(up+dn)*100}
+    if(v!=null&&isFinite(v))out.push({date:base[i].date,v})}
+  return out;
+}
+
+/* ============================== analysis ============================== */
+function analyze(ind,h){
+  const rows=timeline();const tcol=S.target.col?colKey(S.target.ds,S.target.col):null;
+  const iv=indSeries(ind);const imap=new Map(iv.map(p=>[p.date,p.v]));
+  const r=targetReturn(rows,tcol,h);
+  const xs=[],ys=[],dates=[];
+  rows.forEach((row,i)=>{const ivv=imap.get(row.date);
+    if(ivv!=null&&r[i]!=null){xs.push(ivv);ys.push(r[i]);dates.push(row.date)}});
+  const n=xs.length;if(n<10)return{n,xs,ys,dates};
+  const ic=pearson(xs,ys),ric=spearman(xs,ys),p=icPval(ic,n),fit=ols(xs,ys);
+  const zs=zscore(xs);
+  const{curve,trades}=cumCurve(zs,ys,S.th.long,S.th.short);
+  const q=quantiles(xs,ys,10);
+  const mono=spearman(q.map(g=>g.i),q.map(g=>g.m));
+  const roll=rollingCorr(xs,ys,S.rollW);
+  return{n,ic,ric,p,fit,zs,ys,xs,dates,curve,trades,q,mono,roll,
+    histI:histogram(xs),histR:histogram(ys),dd:maxDD(curve)};
+}
+const verdict=(ic,p)=>Math.abs(ic)>=0.1&&p<0.05?['非常に優秀','g']:Math.abs(ic)>=0.05&&p<0.05?['優秀','g']:Math.abs(ic)>=0.05?['ICはあるがp値注意','w']:p>=0.05&&Math.abs(ic)>=0.03?['偶然の可能性','w']:['弱い','n'];
+
+/* ============================== charts (svg) ============================== */
+const NS='http://www.w3.org/2000/svg';
+function svg(w,h){const s=document.createElementNS(NS,'svg');s.setAttribute('viewBox',`0 0 ${w} ${h}`);s.setAttribute('class','chart');return s}
+function el(t,a){const e=document.createElementNS(NS,t);for(const k in a)e.setAttribute(k,a[k]);return e}
+function txt(x,y,s,a={}){const e=el('text',{x,y,'font-size':9,fill:'#5b6470',...a});e.textContent=s;return e}
+function ticks(mn,mx,k=6){if(mn===mx){mn-=1;mx+=1}const st=(mx-mn)/k,mag=Math.pow(10,Math.floor(Math.log10(st)));
+  const stp=[1,2,5,10].map(m=>m*mag).find(v=>st/v<=1.5)||10*mag;
+  const out=[];for(let v=Math.ceil(mn/stp)*stp;v<=mx+1e-9;v+=stp)out.push(+v.toFixed(8));return out}
+function frame(s,W,H,pad){s.appendChild(el('rect',{x:0,y:0,width:W,height:H,fill:'#fff'}));
+  return{px:v=>pad.l+(v[0]),py:v=>v[1],inner:{x:pad.l,y:pad.t,w:W-pad.l-pad.r,h:H-pad.t-pad.b}}}
+function scatterChart(host,xs,ys,fit){
+  const W=640,H=340,pad={l:44,r:10,t:10,b:30};const s=svg(W,H);
+  const xm=Math.min(...xs),xM=Math.max(...xs),ym=Math.min(...ys),yM=Math.max(...ys);
+  const X=v=>pad.l+(v-xm)/(xM-xm||1)*(W-pad.l-pad.r),Y=v=>pad.t+(1-(v-ym)/(yM-ym||1))*(H-pad.t-pad.b);
+  for(const t of ticks(xm,xM)){s.appendChild(el('line',{x1:X(t),y1:pad.t,x2:X(t),y2:H-pad.b,stroke:'#eef0f3'}));s.appendChild(txt(X(t),H-pad.b+12,fmt(t,2),{'text-anchor':'middle'}))}
+  for(const t of ticks(ym,yM)){s.appendChild(el('line',{x1:pad.l,y1:Y(t),x2:W-pad.r,y2:Y(t),stroke:'#eef0f3'}));s.appendChild(txt(pad.l-6,Y(t)+3,pct(t,1),{'text-anchor':'end'}))}
+  s.appendChild(el('line',{x1:pad.l,y1:Y(0),x2:W-pad.r,y2:Y(0),stroke:'#c6ccd3','stroke-dasharray':'3 3'}));
+  const n=xs.length,r=Math.max(1.4,Math.min(3.2,240/Math.sqrt(n)));
+  for(let i=0;i<n;i++)s.appendChild(el('circle',{cx:X(xs[i]),cy:Y(ys[i]),r,fill:'#1f6fd6',opacity:.35}));
+  const y1=fit.a+fit.b*xm,y2=fit.a+fit.b*xM;
+  s.appendChild(el('line',{x1:X(xm),y1:Y(y1),x2:X(xM),y2:Y(y2),stroke:'#c23030','stroke-width':1.8}));
+  const band=1.96*fit.syx;
+  s.appendChild(el('line',{x1:X(xm),y1:Y(y1+band),x2:X(xM),y2:Y(y2+band),stroke:'#c23030','stroke-dasharray':'4 4',opacity:.6}));
+  s.appendChild(el('line',{x1:X(xm),y1:Y(y1-band),x2:X(xM),y2:Y(y2-band),stroke:'#c23030','stroke-dasharray':'4 4',opacity:.6}));
+  s.appendChild(txt(W-pad.r-4,pad.t+10,`R² = ${fmt(fit.r2,3)}`,{'text-anchor':'end',fill:'#c23030','font-size':10}));
+  s.appendChild(txt(W/2,H-4,'指標（raw値）',{'text-anchor':'middle'}));
+  const yl=txt(12,H/2,'リターン',{'text-anchor':'middle'});yl.setAttribute('transform',`rotate(-90 12 ${H/2})`);s.appendChild(yl);
+  host.replaceChildren(s);
+}
+function lineChart(host,labels,seriesList){
+  const W=640,H=240,pad={l:48,r:10,t:10,b:26};const s=svg(W,H);
+  const allV=seriesList.flatMap(sr=>sr.data.filter(v=>v!=null));
+  if(!allV.length){host.replaceChildren(s);return}
+  const ym=Math.min(...allV,0),yM=Math.max(...allV);
+  const X=i=>pad.l+i/(labels.length-1||1)*(W-pad.l-pad.r),Y=v=>pad.t+(1-(v-ym)/(yM-ym||1))*(H-pad.t-pad.b);
+  for(const t of ticks(ym,yM)){s.appendChild(el('line',{x1:pad.l,y1:Y(t),x2:W-pad.r,y2:Y(t),stroke:'#eef0f3'}));s.appendChild(txt(pad.l-6,Y(t)+3,fmt(t,2),{'text-anchor':'end'}))}
+  const step=Math.max(1,Math.floor(labels.length/8));
+  labels.forEach((l,i)=>{if(i%step===0)s.appendChild(txt(X(i),H-pad.b+12,l.slice(2,7),{'text-anchor':'middle'}))});
+  const zero=ym<0&&yM>0?Y(0):null;
+  if(zero!=null)s.appendChild(el('line',{x1:pad.l,y1:zero,x2:W-pad.r,y2:zero,stroke:'#c6ccd3','stroke-dasharray':'3 3'}));
+  const colors=['#1f6fd6','#0a7d4f','#c23030','#b45309'];
+  seriesList.forEach((sr,si)=>{let d='',started=false;
+    sr.data.forEach((v,i)=>{if(v==null){started=false;return}
+      d+=(started?'L':'M')+X(i).toFixed(1)+' '+Y(v).toFixed(1);started=true});
+    s.appendChild(el('path',{d,fill:'none',stroke:sr.color||colors[si%4],'stroke-width':1.4}))});
+  host.replaceChildren(s);
+}
+function barChart(host,vals,labels,{unit='',color='#1f6fd6',neg='#c23030'}={}){
+  const W=640,H=220,pad={l:48,r:10,t:10,b:40};const s=svg(W,H);
+  const ym=Math.min(...vals,0),yM=Math.max(...vals,0);
+  const Y=v=>pad.t+(1-(v-ym)/(yM-ym||1))*(H-pad.t-pad.b),bw=(W-pad.l-pad.r)/vals.length;
+  for(const t of ticks(ym,yM)){s.appendChild(el('line',{x1:pad.l,y1:Y(t),x2:W-pad.r,y2:Y(t),stroke:'#eef0f3'}));s.appendChild(txt(pad.l-6,Y(t)+3,fmt(t,4),{'text-anchor':'end'}))}
+  vals.forEach((v,i)=>{const x=pad.l+i*bw+bw*.12,y0=Y(0),y1=Y(v);
+    s.appendChild(el('rect',{x,y:Math.min(y0,y1),width:bw*.76,height:Math.abs(y1-y0)||1,fill:v>=0?color:neg,rx:2}));
+    s.appendChild(txt(x+bw*.38,H-pad.b+12,labels[i],{'text-anchor':'middle'}))});
+  s.appendChild(el('line',{x1:pad.l,y1:Y(0),x2:W-pad.r,y2:Y(0),stroke:'#c6ccd3'}));
+  host.replaceChildren(s);
+}
+function histChart(host,h){
+  const labels=h.c.map((_,i)=>fmt(h.mn+h.w*(i+.5),2));
+  barChart(host,h.c,labels,{color:'#7aa6dd'});
+}
+
+/* ============================== render: データ ============================== */
+let pendingFiles=[];
+function renderData(){
+  const el=$('#s-data');
+  const dsRows=S.datasets.map(d=>`<tr><td><b>${esc(d.name)}</b></td>
+    <td class="num">${d.rows.length}</td><td>${d.rows[0]?.date} 〜 ${d.rows.at(-1)?.date}</td>
+    <td class="small muted">${d.cols.map(c=>esc(c.label)).join('、')}</td>
+    <td><button class="btn sm danger" data-del="${d.id}">削除</button></td></tr>`).join('');
+  const evBySrc=new Map();for(const e of S.events){const s=evBySrc.get(e.src)||{n:0,mn:e.d,mx:e.d};s.n++;if(e.d<s.mn)s.mn=e.d;if(e.d>s.mx)s.mx=e.d;evBySrc.set(e.src,s)}
+  const evRows=[...evBySrc].map(([src,o])=>`<tr><td><b>${esc(src)}</b></td><td class="num">${o.n}</td><td>${o.mn} 〜 ${o.mx}</td>
+    <td><button class="btn sm danger" data-evdel="${esc(src)}">削除</button></td></tr>`).join('');
+  el.innerHTML=`
+  <div class="panel"><h2>CSV取込</h2>
+    <div class="row">
+      <input type="file" id="csvFiles" accept=".csv,.txt" multiple>
+      <span class="small muted">対応例: 日経平均公式CSV（Shift-JIS可）・CBOE VIX CSV・stooq CSV。日付列は自動検出。</span>
+    </div>
+    <div id="pending"></div>
+  </div>
+  <div class="panel"><h2>イベント取込（発表カレンダー）</h2>
+    <div class="row">
+      <input type="file" id="evFile" accept=".csv,.xml,.txt">
+      <span class="small muted">イベントCSV（date,title,forecast,actual…）・ForexFactory週次XML・日付のみのリスト。複数回取込で蓄積・重複は自動除去。分析画面で発表日リターンと全日を比較します。</span>
+    </div>
+    ${S.evSaveFail?'<div class="warnline">イベント数が多くブラウザ保存容量を超えた可能性があります。「JSON書出」で退避するか、不要な取込元を削除してください。</div>':''}
+    ${S.events.length?`<table class="t" style="margin-top:10px"><thead><tr><th>取込元</th><th>件数</th><th>期間</th><th></th></tr></thead><tbody>${evRows}</tbody></table>
+      <p class="note">合計 ${S.events.length.toLocaleString()} 件。指標画面で「イベント・◯◯」種類を選び、タイトル/通貨/重要度で絞ります。</p>`:'<p class="muted small" style="margin-top:8px">まだイベントがありません。</p>'}
+  </div>
+  <div class="panel"><h2>取込済みデータセット</h2>
+    ${S.datasets.length?`<table class="t"><thead><tr><th>名前</th><th>行数</th><th>期間</th><th>列</th><th></th></tr></thead><tbody>${dsRows}</tbody></table>
+    <hr class="hr"><div class="row">
+      <label class="f">リターン対象（終値）<select id="targetSel"></select></label>
+      <label class="f">リターン期間<select id="horSel"><option value="1">翌日（1日）</option><option value="5">1週（5日）</option><option value="10">2週（10日）</option><option value="20">1月（20日）</option><option value="60">3月（60日）</option></select></label>
+      <label class="check" style="align-self:end"><input type="checkbox" id="fillChk" ${S.fill?'checked':''}> 欠損日は直近値で補完（米国⇔日本の休日ずれ対策）</label>
+    </div>`:'<p class="muted">まだデータがありません。上からCSVを取込んでください。</p>'}
+  </div>`;
+  const cols=allCols().filter(c=>/終値|close/i.test(c.label)).concat(allCols().filter(c=>!/終値|close/i.test(c.label)));
+  const sel=$('#targetSel');if(sel){sel.innerHTML=cols.map(c=>`<option value="${c.key}" ${colKey(S.target.ds,S.target.col)===c.key?'selected':''}>${esc(c.label)}</option>`).join('');
+    if(!S.target.col&&cols.length){const[ds,col]=cols[0].key.split('::');S.target={ds,col}}
+    sel.onchange=()=>{const[ds,col]=sel.value.split('::');S.target={ds,col};persist();renderAll()};}
+  const hsel=$('#horSel');if(hsel){hsel.value=S.horizon;hsel.onchange=()=>{S.horizon=+hsel.value;persist();renderAll()}}
+  const fc=$('#fillChk');if(fc)fc.onchange=()=>{S.fill=fc.checked;persist();renderAll()};
+  $('#csvFiles').onchange=e=>{pendingFiles=[...e.target.files];renderPending()};
+  $('#evFile').onchange=async e=>{const f=e.target.files[0];if(!f)return;
+    try{const n=addEvents(f.name,await readTextDec(f));persistEv();renderAll();
+      if(!n)alert('新規イベントは0件でした（重複のみ）')}catch(err){alert('イベント取込失敗: '+err.message)}};
+  $$('#s-data [data-del]').forEach(b=>b.onclick=()=>{S.datasets=S.datasets.filter(d=>d.id!==b.dataset.del);
+    S.indicators=S.indicators.filter(i=>!i.src.startsWith(b.dataset.del));persist();renderAll()});
+  $$('#s-data [data-evdel]').forEach(b=>b.onclick=()=>{S.events=S.events.filter(e=>e.src!==b.dataset.evdel);persistEv();renderAll()});
+  renderPending();
+}
+function renderPending(){
+  const box=$('#pending');if(!box)return;
+  box.innerHTML=pendingFiles.map((f,i)=>{let info='';
+    try{const rows=parseCSVCache.get(f.name);if(rows)info=`検出: ${rows.hdr.length}列 / ${rows.data.length}行 / 日付列「${esc(rows.dateName)}」`}
+    catch(e){info='解析失敗: '+e.message}
+    return`<div class="row" style="margin-top:8px">
+      <input type="text" value="${esc(f.name.replace(/\.[^.]+$/,''))}" data-pname="${i}" style="width:12em">
+      <span class="small muted">${esc(f.name)}</span><span class="small">${info}</span>
+      <button class="btn sm acc" data-add="${i}">取込</button></div>`}).join('');
+  $$('#pending [data-add]').forEach(b=>b.onclick=()=>importFile(+b.dataset.add));
+}
+const parseCSVCache=new Map();
+async function readTextDec(file){const buf=await file.arrayBuffer();
+  try{return new TextDecoder('utf-8',{fatal:true}).decode(buf)}catch(e){return new TextDecoder('shift-jis').decode(buf)}}
+async function importFile(i){
+  const f=pendingFiles[i];if(!f)return;
+  const name=$(`[data-pname="${i}"]`).value||f.name;
+  const text=await readTextDec(f);
+  try{const ds=csvToDataset(name,text);S.datasets.push(ds);
+    if(!S.target.col){const c=ds.cols.find(c=>/終値|close/i.test(c.label))||ds.cols[0];S.target={ds:ds.id,col:c.key}}
+    pendingFiles.splice(i,1);persist();renderAll();
+  }catch(e){alert('取込失敗: '+e.message)}
+}
+// pre-parse on file selection for info line
+document.addEventListener('change',async e=>{
+  if(e.target.id==='csvFiles'){parseCSVCache.clear();
+    for(const f of e.target.files){try{const t=await readTextDec(f);const rows=parseCSV(t.replace(/^﻿/,''));
+      const hdr=rows[0].map(h=>h.trim());let dateName='?';
+      for(let c=0;c<hdr.length;c++){const ok=rows.slice(1).filter(r=>parseDate(r[c])).length;if(ok>rows.length*0.4){dateName=hdr[c];break}}
+      parseCSVCache.set(f.name,{hdr,data:rows.slice(1),dateName})}catch(err){}}
+    renderPending()}
+});
+
+/* ============================== render: 指標 ============================== */
+const indFltText=i=>{if(!i.flt)return'';
+  return`「${i.flt.text||'全て'}」${i.flt.cur?' '+i.flt.cur:''}${i.flt.minImp?' 重要度≥'+i.flt.minImp:''}`};
+function renderInd(){
+  const el=$('#s-ind');const cols=allCols();
+  const adoptedN=S.indicators.filter(i=>S.adopted[i.id]).length;
+  const rows=S.indicators.map(i=>{const ps=Object.entries(i.params).map(([k,v])=>`${k}=${v}`).join(' ');
+    const src=allCols().find(c=>c.key===i.src);
+    const isEv=IND_TYPES[i.kind]&&IND_TYPES[i.kind].ev;
+    return`<tr><td><b>${esc(i.name)}</b></td><td>${IND_TYPES[i.kind].name}</td>
+      <td class="small muted">${isEv?esc(indFltText(i)):esc(src?.label||i.src)+' '+ps}</td>
+      <td class="num">${paramCount(i)}</td>
+      <td><label class="check"><input type="checkbox" data-adopt="${i.id}" ${S.adopted[i.id]?'checked':''}>採用</label></td>
+      <td><button class="btn sm danger" data-idel="${i.id}">削除</button></td></tr>`}).join('');
+  el.innerHTML=`
+  <div class="panel"><h2>指標を追加</h2>
+    <div class="row">
+      <label class="f">種類<select id="ik"></select></label>
+      <label class="f" id="isrcw">基となる列<select id="isrc"></select></label>
+      <span id="iparams"></span>
+      <span id="ievflt"></span>
+      <button class="btn acc" id="iadd">追加</button>
+    </div>
+    <p class="note" id="idesc"></p>
+  </div>
+  ${adoptedN>3?`<div class="warnline">採用指標が${adoptedN}個。ブログの指針は1〜3個まで——増やすほどカーブフィッティングの危険が増します。</div>`:''}
+  <div class="panel"><h2>指標一覧 <span class="small muted">採用 ${adoptedN}/3</span></h2>
+    ${S.indicators.length?`<table class="t"><thead><tr><th>名前</th><th>種類</th><th>元データ・パラメータ</th><th>パラメータ数</th><th></th><th></th></tr></thead><tbody>${rows}</tbody></table>`:'<p class="muted">まだ指標がありません。</p>'}
+  </div>`;
+  $('#ik').innerHTML=Object.entries(IND_TYPES).map(([k,v])=>`<option value="${k}">${v.name}</option>`).join('');
+  $('#isrc').innerHTML=cols.map(c=>`<option value="${c.key}">${esc(c.label)}</option>`).join('');
+  const updParams=()=>{const k=$('#ik').value,KT=IND_TYPES[k];$('#idesc').textContent=KT.desc;
+    $('#isrcw').style.display=KT.ev?'none':'';
+    $('#iparams').innerHTML=KT.params.map(([p,d])=>`<label class="f">${p}<input type="number" data-p="${p}" value="${d}" style="width:6em"></label>`).join('');
+    if(KT.ev){
+      $('#ievflt').innerHTML=`<label class="f">タイトル絞込（部分一致）<input type="text" id="evText" list="evTL" placeholder="例: Federal Funds / CPI" style="width:15em"></label>
+        <datalist id="evTL"></datalist>
+        <label class="f">通貨<select id="evCur" style="width:6.5em"><option value="">全て</option>${evCurs().map(c=>`<option>${c}</option>`).join('')}</select></label>
+        <label class="f">重要度<select id="evImp" style="width:6.5em"><option value="0">全て</option><option value="1">中以上</option><option value="2">高のみ</option></select></label>
+        <span class="small muted" id="evN"></span>`;
+      $('#evTL').innerHTML=evTitles().map(t=>`<option value="${esc(t)}">`).join('');
+      const updN=()=>{const n=matchEvents({text:$('#evText').value,cur:$('#evCur').value,minImp:+$('#evImp').value}).length;
+        $('#evN').textContent='該当 '+n+' 件'};
+      $('#evText').oninput=updN;$('#evCur').onchange=updN;$('#evImp').onchange=updN;updN();
+    }else $('#ievflt').innerHTML='';
+  };
+  $('#ik').onchange=updParams;updParams();
+  $('#iadd').onclick=()=>{const k=$('#ik').value,KT=IND_TYPES[k];
+    const params={};$$('#iparams [data-p]').forEach(i=>params[i.dataset.p]=+i.value);
+    if(KT.ev){
+      const flt={text:$('#evText').value.trim(),cur:$('#evCur').value,minImp:+$('#evImp').value};
+      const name=KT.name+'('+(flt.text||'全イベント')+(flt.cur?','+flt.cur:'')+')';
+      S.indicators.push({id:uid(),kind:k,src:'',params,flt,name});persist();renderAll();return}
+    const src=$('#isrc').value;
+    const srcLabel=allCols().find(c=>c.key===src)?.label||src;
+    const name=KT.name+'('+srcLabel.split('.').pop()+(params.period?','+params.period:'')+')';
+    S.indicators.push({id:uid(),kind:k,src,params,name});persist();renderAll()};
+  $$('#s-ind [data-idel]').forEach(b=>b.onclick=()=>{S.indicators=S.indicators.filter(i=>i.id!==b.dataset.idel);delete S.adopted[b.dataset.idel];persist();renderAll()});
+  $$('#s-ind [data-adopt]').forEach(b=>b.onchange=()=>{S.adopted[b.dataset.adopt]=b.checked;persist();renderAll()});
+}
+const paramCount=i=>i.kind==='column'?1:Object.keys(i.params).length+1;
+
+/* ============================== render: 分析 ============================== */
+let anaSel=null,anaRegime='';
+const CHECKS=['散布図で相関の形を目視確認した','|IC| が閾値を超えp値が十分小さい','累積リターンが一時期依存でない','分位別が階段状になっている','分布の非正規性・外れ値を確認した','「なぜ効くか」の仮説を書いた','採用指標の合計が3個以内'];
+function renderAna(){
+  const el=$('#s-ana');
+  if(!S.indicators.length||!S.target.col){el.innerHTML='<div class="panel"><p class="muted">データと指標を先に用意してください（データ画面・指標画面）。</p></div>';return}
+  if(!anaSel||!S.indicators.find(i=>i.id===anaSel))anaSel=S.indicators[0].id;
+  const ind=S.indicators.find(i=>i.id===anaSel);
+  const A=analyze(ind,S.horizon);
+  const kpi=A.n>=10?(()=>{const[v,c]=verdict(A.ic,A.p);return`
+    <div class="grid c4">
+      <div class="kpi"><div class="l">情報係数 IC</div><div class="v">${fmt(A.ic)}</div><div class="d">|IC|≥0.05で優秀、≥0.1で非常に優秀</div></div>
+      <div class="kpi"><div class="l">RankIC（順位相関）</div><div class="v">${fmt(A.ric)}</div><div class="d">外れ値に頑健な相関</div></div>
+      <div class="kpi"><div class="l">p値（近似）</div><div class="v">${fmt(A.p,4)}</div><div class="d">大きいほど偶然の可能性</div></div>
+      <div class="kpi"><div class="l">判定</div><div class="v"><span class="badge ${c}">${v}</span></div><div class="d">n=${A.n}・R²=${fmt(A.fit.r2)}</div></div>
+    </div>`})():'<div class="warnline">有効なペアが不足しています（n='+A.n+'）。データ期間・リターン期間・補完設定を確認。</div>';
+  const regCols=[{key:'',label:'（なし）'}].concat(allCols());
+  const ck=S.checks[anaSel]||{};
+  el.innerHTML=`
+  <div class="panel"><div class="row">
+    <label class="f">指標<select id="as">${S.indicators.map(i=>`<option value="${i.id}" ${i.id===anaSel?'selected':''}>${esc(i.name)}</option>`).join('')}</select></label>
+    <label class="f">リターン期間<select id="ah"><option value="1">翌日</option><option value="5">5日</option><option value="10">10日</option><option value="20">20日</option><option value="60">60日</option></select></label>
+    <label class="f">レジーム分割（条件変数）<select id="ar">${regCols.map(c=>`<option value="${c.key}" ${anaRegime===c.key?'selected':''}>${esc(c.label)}</option>`).join('')}</select></label>
+    <label class="f">ローリングIC窓<input type="number" id="arw" value="${S.rollW}" style="width:5em"></label>
+  </div></div>
+  ${kpi}
+  ${IND_TYPES[ind.kind]&&IND_TYPES[ind.kind].ev?'<div class="panel" id="evPanel"></div>':''}
+  ${A.n>=10?`
+  <div class="grid c2" style="margin-top:14px">
+    <div class="panel"><h3>散布図（指標 × リターン）</h3><div id="ch-sc"></div><div class="legend"><span><span class="sw" style="background:#c23030"></span>回帰直線 ±1.96σ</span><span><span class="sw" style="background:#1f6fd6"></span>各日</span></div></div>
+    <div class="panel"><h3>分位別リターン（10群） ${Math.abs(A.mono)>0.8?'<span class="badge g">階段状</span>':'<span class="badge w">階段状でない可能性</span>'}</h3><div id="ch-q"></div></div>
+    <div class="panel"><h3>指標の分布</h3><div id="ch-hi"></div></div>
+    <div class="panel"><h3>リターンの分布</h3><div id="ch-hr"></div></div>
+    <div class="panel"><h3>資産曲線（Z&gt;${S.th.long} ロング / Z&lt;−${S.th.short} ショート）</h3><div id="ch-cum"></div><p class="note">トレード日数 ${A.trades} / ${A.n}・最大DD ${pct(A.dd)}</p></div>
+    <div class="panel"><h3>ローリングIC（${S.rollW}日）</h3><div id="ch-ic"></div></div>
+  </div>
+  <div class="panel" id="regPanel"></div>
+  <div class="panel"><h3>採用チェックリスト</h3>
+    ${CHECKS.map((c,i)=>`<label class="check"><input type="checkbox" data-ck="${i}" ${ck[i]?'checked':''}>${c}</label>`).join('')}
+    <hr class="hr"><label class="f">演繹メモ — なぜこの指標が効くと考えるか<textarea id="memo" placeholder="例: VIが高い＝投資家の恐怖が行き過ぎ→翌日リバウンドしやすい…">${esc(S.memos[anaSel]||'')}</textarea></label>
+  </div>`:''}`;
+  $('#as').onchange=e=>{anaSel=e.target.value;renderAll()};
+  $('#ah').value=S.horizon;$('#ah').onchange=e=>{S.horizon=+e.target.value;persist();renderAll()};
+  $('#ar').onchange=e=>{anaRegime=e.target.value;renderAll()};
+  $('#arw').onchange=e=>{S.rollW=+e.target.value||60;persist();renderAll()};
+  if(A.n>=10){
+    scatterChart($('#ch-sc'),A.xs,A.ys,A.fit);
+    barChart($('#ch-q'),A.q.map(g=>g.m),A.q.map(g=>'Q'+g.i),{neg:'#c23030'});
+    histChart($('#ch-hi'),A.histI);histChart($('#ch-hr'),A.histR);
+    lineChart($('#ch-cum'),A.dates,[{data:A.curve,color:'#0a7d4f'}]);
+    lineChart($('#ch-ic'),A.dates,[{data:A.roll}]);
+    renderRegime(ind,A);wireChecks();
+  }
+  renderEventPanel(ind);
+}
+function renderEventPanel(ind){
+  const p=$('#evPanel');if(!p)return;
+  if(!(IND_TYPES[ind.kind]&&IND_TYPES[ind.kind].ev)){p.remove();return}
+  const ES=eventStudy(ind.flt,S.horizon);
+  if(!ES.total){p.innerHTML='<h3>イベント集計</h3><p class="muted">この条件に合うイベントが0件です。データ画面でイベントCSV/XMLを取込むか、タイトル/通貨/重要度の条件を変えてください。</p>';return}
+  const diff=(ES.m!=null&&ES.bm!=null)?ES.m-ES.bm:null;
+  const last=ES.recs.slice(-40);
+  const rows=[...ES.recs].slice(-25).reverse().map(r=>`<tr>
+    <td>${r.e.d}</td><td>${r.tdate}</td><td class="small">${esc(r.e.title)}</td>
+    <td>${['低','中','高'][r.e.imp]||''}</td>
+    <td class="num">${r.e.f!=null?fmt(r.e.f,2):'—'}</td><td class="num">${r.e.a!=null?fmt(r.e.a,2):'—'}</td>
+    <td class="num" style="color:${r.ret>=0?'var(--good)':'var(--bad)'};font-weight:600">${pct(r.ret)}</td></tr>`).join('');
+  p.innerHTML=`<h3>イベント集計 — 発表日（直近取引日）リターン ${S.horizon}日 vs 全日平均</h3>
+    <div class="grid c4">
+      <div class="kpi"><div class="l">イベント日 平均</div><div class="v">${ES.m!=null?pct(ES.m):'—'}</div><div class="d">n=${ES.n}（該当${ES.total}件中・期間重複）</div></div>
+      <div class="kpi"><div class="l">非イベント日 平均</div><div class="v">${pct(ES.bm)}</div><div class="d">n=${ES.baseR.length}</div></div>
+      <div class="kpi"><div class="l">差（イベント−全日）</div><div class="v">${diff!=null?pct(diff):'—'}</div><div class="d">プラス時の勝率 ${ES.win!=null?(ES.win*100).toFixed(0)+'%':'—'}</div></div>
+      <div class="kpi"><div class="l">Welch t / p（近似）</div><div class="v">${ES.welch?fmt(ES.welch.t,2)+' / '+fmt(ES.welch.p,3):'—'}</div><div class="d">${ES.welch?(ES.welch.p<0.05?'<span class="badge g">有意な差の可能性</span>':'<span class="badge n">差は偶然の範囲か</span>'):ES.n<3?'n不足':''}</div></div>
+    </div>
+    <div id="ch-ev" style="margin-top:12px"></div>
+    <table class="t" style="margin-top:12px"><thead><tr><th>発表日</th><th>対象取引日</th><th>イベント</th><th>重要度</th><th>予想</th><th>結果</th><th>リターン</th></tr></thead><tbody>${rows}</tbody></table>
+    <p class="note">発表日が休場なら直後の取引日に対応。米国発表→日本株なら「翌日」、日本発表→日本株なら「当日」側に効くことが多い。予想/結果が空のイベントはサプライズ指標には使えません。</p>`;
+  if(last.length)barChart($('#ch-ev'),last.map(r=>r.ret),last.map(r=>r.tdate.slice(2)),{neg:'#c23030'});
+}
+function renderRegime(ind,A){
+  const p=$('#regPanel');if(!p)return;
+  if(!anaRegime){p.innerHTML='<h3>レジーム分割</h3><p class="muted">条件変数を選ぶと、その高低で分析を分けて表示します（交互作用の発見）。</p>';return}
+  const rv=seriesOf(anaRegime);const rmap=new Map(rv.map(x=>[x.date,x.v]));
+  const pairs=A.dates.map((d,i)=>({d,r:rmap.get(d),x:A.xs[i],y:A.ys[i]})).filter(o=>o.r!=null);
+  if(pairs.length<20){p.innerHTML='<h3>レジーム分割</h3><p class="muted">条件変数と重なる期間が不足しています。</p>';return}
+  const med=median(pairs.map(o=>o.r));
+  const hi=pairs.filter(o=>o.r>=med),lo=pairs.filter(o=>o.r<med);
+  const row=(g,nm)=>{const ic=pearson(g.map(o=>o.x),g.map(o=>o.y)),ric=spearman(g.map(o=>o.x),g.map(o=>o.y));
+    return`<tr><td>${nm}</td><td class="num">${g.length}</td><td class="num">${fmt(ic)}</td><td class="num">${fmt(ric)}</td></tr>`};
+  const diff=Math.abs(pearson(hi.map(o=>o.x),hi.map(o=>o.y))-pearson(lo.map(o=>o.x),lo.map(o=>o.y)));
+  p.innerHTML=`<h3>レジーム分割： ${esc(allCols().find(c=>c.key===anaRegime)?.label)}（中央値 ${fmt(med)} で二分）</h3>
+    <table class="t"><thead><tr><th>区間</th><th>n</th><th>IC</th><th>RankIC</th></tr></thead>
+    <tbody>${row(lo,'低〈中央値未満')}${row(hi,'高〈中央値以上')}${row(pairs,'全体')}</tbody></table>
+    ${diff>0.05?`<p class="note">区間でICが大きく異なります（差 ${fmt(diff)}）。交互作用の可能性がありますが、条件追加はパラメータ増＝カーブフィッティングの危険も増えます。</p>`:'<p class="note">区間間で大きな差は見られません。</p>'}`;
+}
+function wireChecks(){
+  $$('#s-ana [data-ck]').forEach(b=>b.onchange=()=>{const c=S.checks[anaSel]||{};c[b.dataset.ck]=b.checked;S.checks[anaSel]=c;persist()});
+  const m=$('#memo');if(m)m.oninput=debounce(()=>{S.memos[anaSel]=m.value;persist()},400);
+}
+
+/* ============================== render: 比較 ============================== */
+function renderCmp(){
+  const el=$('#s-cmp');
+  if(!S.indicators.length||!S.target.col){el.innerHTML='<div class="panel"><p class="muted">データと指標を先に用意してください。</p></div>';return}
+  const rows=S.indicators.map(i=>{const A=analyze(i,S.horizon);
+    const[v,c]=A.n>=10?verdict(A.ic,A.p):['—','n'];
+    return{i,A,v,c}}).sort((a,b)=>Math.abs(b.A.ic||0)-Math.abs(a.A.ic||0));
+  el.innerHTML=`<div class="panel"><h2>指標ランキング（|IC|順・リターン期間${S.horizon}日）</h2>
+    <table class="t"><thead><tr><th>#</th><th>指標</th><th>IC</th><th>|IC|</th><th>RankIC</th><th>p値</th><th>n</th><th>判定</th><th>採用</th></tr></thead><tbody>
+    ${rows.map((r,k)=>`<tr class="clickable" data-i="${r.i.id}"><td>${k+1}</td><td>${esc(r.i.name)}</td>
+      <td class="num">${fmt(r.A.ic)}</td><td class="num">${fmt(Math.abs(r.A.ic))}</td>
+      <td class="num">${fmt(r.A.ric)}</td><td class="num">${fmt(r.A.p,4)}</td><td class="num">${r.A.n}</td>
+      <td><span class="badge ${r.c}">${r.v}</span></td><td>${S.adopted[r.i.id]?'●':''}</td></tr>`).join('')}
+    </tbody></table>
+    <p class="note">行をクリックすると分析画面へ。ICは±どちらでも良い（負なら逆張りとして使える）。|IC|≥0.05 が採用目安。</p></div>`;
+  $$('#s-cmp [data-i]').forEach(b=>b.onclick=()=>{anaSel=b.dataset.i;go('ana')});
+}
+
+/* ============================== render: ストラテジー ============================== */
+function renderStr(){
+  const el=$('#s-str');
+  if(!S.indicators.length||!S.target.col){el.innerHTML='<div class="panel"><p class="muted">データと指標を先に用意してください。</p></div>';return}
+  if(!anaSel||!S.indicators.find(i=>i.id===anaSel))anaSel=S.indicators[0].id;
+  const ind=S.indicators.find(i=>i.id===anaSel);
+  const A=analyze(ind,S.horizon);
+  let body='';
+  if(A.n>=10){
+    const posR=[];for(let i=0;i<A.zs.length;i++){const p=A.zs[i]>S.th.long?1:A.zs[i]<-S.th.short?-1:0;if(p!==0)posR.push(p*A.ys[i])}
+    const e=posR.length?mean(posR):0,sg=posR.length>1?stdev(posR):0;
+    const days=A.dates.length?Math.max(1,(Date.parse(A.dates.at(-1))-Date.parse(A.dates[0]))/864e5):1;
+    const nYear=posR.length/(days/365.25);
+    const ann=Math.pow(1+e,nYear)-1;
+    const g=S.goal,okE=ann*100>=g.yld,okD=A.dd*100<=g.dd;
+    body=`
+    <div class="grid c4">
+      <div class="kpi"><div class="l">期待成長率 e（1トレード）</div><div class="v">${pct(e)}</div><div class="d">ポジション保有日の平均リターン</div></div>
+      <div class="kpi"><div class="l">標準偏差 σ</div><div class="v">${pct(sg)}</div><div class="d">e/σ（シャープ相当）= ${fmt(sg?e/sg:0)}</div></div>
+      <div class="kpi"><div class="l">トレード数</div><div class="v">${A.trades}</div><div class="d">年換算 ${fmt(nYear,1)}回・対象${A.n}日</div></div>
+      <div class="kpi"><div class="l">最大ドローダウン</div><div class="v">${pct(A.dd)}</div><div class="d">資産曲線の最大下落率</div></div>
+    </div>
+    <div class="grid c2" style="margin-top:14px">
+      <div class="panel"><h3>資産曲線</h3><div id="ch-seq"></div><p class="note">最終 ${fmt(A.curve.at(-1),3)}倍・推定年率 ${pct(ann,1)}（複利近似）</p></div>
+      <div class="panel"><h3>運用目標との照合</h3>
+        <div class="row">
+          <label class="f">運用資金（万円）<input type="number" id="gc" value="${g.cap}" style="width:7em"></label>
+          <label class="f">目標利回り（年%）<input type="number" id="gy" value="${g.yld}" style="width:6em"></label>
+          <label class="f">許容DD（%）<input type="number" id="gd" value="${g.dd}" style="width:6em"></label>
+        </div>
+        <hr class="hr">
+        <p>推定年率 ${pct(ann,1)} ${okE?'<span class="badge g">目標クリア</span>':'<span class="badge b">目標未達</span>'} ／ 最大DD ${pct(A.dd)} ${okD?'<span class="badge g">許容内</span>':'<span class="badge b">許容超過</span>'}</p>
+        <p class="note">バックテストの結果であり将来を保証しません。手数料・スリッページは未考慮です。</p>
+      </div>
+    </div>`}
+  el.innerHTML=`
+  <div class="panel"><div class="row">
+    <label class="f">指標<select id="ss">${S.indicators.map(i=>`<option value="${i.id}" ${i.id===anaSel?'selected':''}>${esc(i.name)}</option>`).join('')}</select></label>
+    <label class="f">ロング閾値 Z&gt;<input type="number" id="tl" step="0.1" value="${S.th.long}" style="width:5em"></label>
+    <label class="f">ショート閾値 Z&lt;−<input type="number" id="ts" step="0.1" value="${S.th.short}" style="width:5em"></label>
+  </div><p class="note">Zは指標の全期間正規化値。ショートを0に近づけると両方向、大きくするとトレード数が減り期待成長率が上がる傾向（ブログ第3章）。</p></div>
+  ${body}`;
+  $('#ss').onchange=e=>{anaSel=e.target.value;renderAll()};
+  $('#tl').onchange=e=>{S.th.long=+e.target.value;persist();renderAll()};
+  $('#ts').onchange=e=>{S.th.short=+e.target.value;persist();renderAll()};
+  if(A.n>=10){lineChart($('#ch-seq'),A.dates,[{data:A.curve,color:'#0a7d4f'}]);
+    const re=()=>{S.goal={cap:+$('#gc').value,yld:+$('#gy').value,dd:+$('#gd').value};persist();renderAll()};
+    $('#gc').onchange=re;$('#gy').onchange=re;$('#gd').onchange=re}
+}
+
+/* ============================== render: ガイド ============================== */
+function renderGui(){
+  $('#s-gui').innerHTML=`
+  <div class="panel"><h2>使い方（ブログの手順どおり）</h2>
+    <ol class="small" style="line-height:2">
+      <li><b>データ</b>：CSVを取込む。複数のCSVは日付で自動結合される。リターン対象（終値）とリターン期間を選ぶ。</li>
+      <li><b>指標</b>：候補を作る。CSV列（例:日経平均VIの終値）もそのまま指標になる。採用は最終的に1〜3個まで。</li>
+      <li><b>分析</b>：まず散布図。IC→累積リターン→分位別→分布→演繹考察の順で検証する。</li>
+      <li><b>比較</b>：全指標を|IC|で一覧化して候補を絞る。</li>
+      <li><b>ストラテジー</b>：閾値Zを決めて e/σ/N・最大DDを見て、運用目標と照合する。</li>
+    </ol>
+  </div>
+  <div class="panel"><h2>判定の目安（ブログより）</h2>
+    <table class="t">
+      <tr><th>|IC| ≥ 0.1</th><td>非常に優秀な指標</td></tr>
+      <tr><th>|IC| ≥ 0.05</th><td>優秀。ただしp値の確認必須（タイプⅠエラー）</td></tr>
+      <tr><th>分位別が階段状</th><td>素性の良い指標。平坦や飛びは無効・偶然の可能性</td></tr>
+      <tr><th>採用指標 1〜3個</th><td>増えるとカーブフィッティング（AIC的に情報量が劣化）</td></tr>
+      <tr><th>ICだけで判断しない</th><td>特定時期だけ効く指標を掴む危険→累積リターン・ローリングICを必ず見る</td></tr>
+      <tr><th>区間切出しは禁止</th><td>たまたまリターンが高い区間だけ拾うのは完全なカーブフィッティング</td></tr>
+      <tr><th>演繹を書く</th><td>「なぜ効くか」の因果仮説がないものはデータスヌーピングの疑い</td></tr>
+    </table>
+  </div>
+  <div class="panel"><h2>データ源（取得確認済み）</h2>
+    <table class="t"><thead><tr><th>対象</th><th>URL・取得方法</th><th>備考</th></tr></thead><tbody>
+      <tr><td>日経平均・日経平均VI</td><td>indexes.nikkei.co.jp →「データダウンロード」→ 日次データCSV</td><td>無料・直近約3年半・Shift-JIS</td></tr>
+      <tr><td>VIX</td><td>cboe.com → VIX_History.csv</td><td>無料・1990年〜</td></tr>
+      <tr><td>日経・S&P・FX等の長期価格</td><td>stooq.com → 例「^NKX」「^SPX」→ Historical Data → CSV</td><td>無料・数十年分・ブラウザから手動DL（古いイベント検証に必須）</td></tr>
+      <tr><td>イベント履歴 2007〜2023/03（米・日・欧ほか）</td><td>github.com/EPSOFT/dataset-forexfactory → events.csv を Raw でDL → イベント取込</td><td>無料・7.2万件・予想/結果入り（FF由来の蓄積）</td></tr>
+      <tr><td>毎週の経済カレンダー</td><td>nfs.faireconomy.media/ff_calendar_thisweek.xml を保存 → イベント取込</td><td>無料・予想/前回入り・毎週取込で2023年以降を蓄積</td></tr>
+      <tr><td>将来の発表予定（〜2027）</td><td>economicium.com/data/economic-calendar.csv</td><td>無料・日付のみ（予想なし）</td></tr>
+      <tr><td>その他</td><td>任意CSV</td><td>日付列＋数値列があれば取込可。イベントは日付＋タイトル列があれば可</td></tr>
+    </tbody></table>
+  </div>
+  <div class="panel"><h2>イベント分析の考え方</h2>
+    <ul class="small" style="line-height:2">
+      <li>発表は連続系列ではなく「点」→ ICより<b>イベント集計</b>（発表日リターン平均 vs 全日平均・Welchのt検定）が本筋。分析画面に指標を選ぶだけで自動で出ます。</li>
+      <li>価格を動かすのは発表そのものより<b>予想との乖離（サプライズ）</b>。「イベント・サプライズ」指標にしてICを見る（予想・結果が両方ある発表のみ）。</li>
+      <li>「次回まで日数」「前回から日数」指標で、発表前後の持ち高調整・ボラ上昇のような時間構造も検証できる。</li>
+      <li>古いイベントを検証するには<b>同じ期間の価格データが必要</b>。付属イベントCSVは2007〜2023/03なので、stooqで長期価格CSVを取込んでください。</li>
+      <li>絞り込み例:「Federal Funds Rate」=FOMC金利・「CPI」=物価・「BOJ」+通貨JPY=日銀系・重要度「高のみ」で注目発表だけ。</li>
+    </ul>
+  </div>
+  <div class="panel"><h2>注意</h2>
+    <p class="small">このツールは指標の統計的検証を行うもので、売買の推奨を出しません。バックテストの成績は過去のものであり将来の収益を保証しません。株式CSVの分割調整・欠損・期間バイアスに注意してください。</p>
+  </div>`;
+}
+
+/* ============================== app ============================== */
+function go(s){$$('#nav button').forEach(b=>b.classList.toggle('on',b.dataset.s===s));
+  $$('section.screen').forEach(x=>x.classList.toggle('on',x.id==='s-'+s));
+  ({data:renderData,ind:renderInd,ana:renderAna,cmp:renderCmp,str:renderStr,gui:renderGui}[s])()}
+function renderAll(){const cur=$('#nav button.on').dataset.s;go(cur)}
+$$('#nav button').forEach(b=>b.onclick=()=>go(b.dataset.s));
+$('#btnExport').onclick=()=>{const blob=new Blob([JSON.stringify(S)],{type:'application/json'});
+  const a=el('a',{});const u=URL.createObjectURL(blob);const link=document.createElement('a');
+  link.href=u;link.download='invbench.json';link.click();URL.revokeObjectURL(u)};
+$('#btnImport').onclick=()=>$('#importJson').click();
+$('#importJson').onchange=async e=>{const f=e.target.files[0];if(!f)return;
+  try{const o=JSON.parse(await f.text());Object.assign(S,o);persist();persistEv();renderAll()}catch(err){alert('読込失敗')}};
+/* console/testing API */
+window.App={S,analyze,csvToDataset,indSeries,seriesOf,timeline,eventStudy,matchEvents,parseEvents,addEvents,evSeries,evCurs,IND_TYPES,
+  addDs:(name,text)=>{const d=csvToDataset(name,text);S.datasets.push(d);
+  if(!S.target.col){const c=d.cols.find(c=>/終値|close/i.test(c.label))||d.cols[0];S.target={ds:d.id,col:c.key}}persist();renderAll();return d.id}};
+restore();renderAll();
+</script>
+</body>
+</html>
