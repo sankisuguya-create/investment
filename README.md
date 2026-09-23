@@ -4,7 +4,7 @@
 we.love-profit.com「シストレのススメ」の方法論（指標探索 → IC検証 → 累積リターン → 分位別 → 分布 → 演繹 → ストラテジー評価）を単一HTMLで実装。
 
 ## ファイル
-- `index.html` — 本体（ブラウザで開くだけ・オフライン・外部通信なし・データは端末内のみ保存）
+- `index.html` — 本体（ブラウザで開くだけ・オフライン・外部通信なし・データは端末内のみ保存）。6画面＋「買い時」画面（暴落買いルールの現在判定と過去検証）
 - `events_2007_2023.csv` — 経済指標・中央銀行発表カレンダー 2007〜2023/03（予想/結果入り・約7万件・ForexFactory由来）
 - `glossary.txt` — 素人向け用語集
 - `design.html` — 設計書
@@ -14,4 +14,10 @@ we.love-profit.com「シストレのススメ」の方法論（指標探索 → 
 2. データ画面： 市場CSV（日経公式・VIX・stooq等）と `events_2007_2023.csv` を取込
 3. 指標画面： 候補指標を追加（イベント系4種も可）
 4. 分析 → 比較 → ストラテジーの順に検証
-5. 週次蓄積： `nfs.faireconomy.media/ff_calendar_thisweek.xml` を保存して取込
+5. 買い時： 暴落買いルール（例: VIのZ≥1.5 かつ 高値から−10%超）を組み、現在の判定とシグナル後20日〜1年リターンを確認
+6. 週次蓄積： `nfs.faireconomy.media/ff_calendar_thisweek.xml` を保存して取込
+
+## 長期価格データ
+- stooq.com: 「^NKX」（日経・1990年〜）「^SPX」（S&P500・数十年）をブラウザからCSV DL
+- Yahoo Finance「^N225」: ヒストリカルデータを期間最大でDL
+- stat-search.boj.or.jp: 日銀公式のTOPIX長期統計

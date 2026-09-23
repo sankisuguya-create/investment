@@ -85,6 +85,7 @@ footer{color:var(--sub);font-size:11px;text-align:center;padding:18px}
   <button data-s="ana">分析</button>
   <button data-s="cmp">比較</button>
   <button data-s="str">ストラテジー</button>
+  <button data-s="buy">買い時</button>
   <button data-s="gui">ガイド</button>
 </nav>
 <main>
@@ -93,6 +94,7 @@ footer{color:var(--sub);font-size:11px;text-align:center;padding:18px}
   <section class="screen" id="s-ana"></section>
   <section class="screen" id="s-cmp"></section>
   <section class="screen" id="s-str"></section>
+  <section class="screen" id="s-buy"></section>
   <section class="screen" id="s-gui"></section>
 </main>
 <footer>検証ツールであり、売買の推奨はしません。方法論の出典: we.love-profit.com「シストレのススメ」</footer>
@@ -313,6 +315,7 @@ const S={
   datasets:[], events:[], indicators:[], target:{ds:null,col:null}, horizon:1, fill:true,
   th:{long:1,short:1}, rollW:60, goal:{cap:100,yld:10,dd:10},
   checks:{}, memos:{}, adopted:{}, evSaveFail:false,
+  buy:{conds:[], dd:{on:false,days:250,th:0.10}, cool:20},
 };
 function persist(){
   try{const ev=S.events;S.events=[];localStorage.setItem('invbench.v1',JSON.stringify(S));S.events=ev}catch(e){}}
@@ -766,6 +769,130 @@ function renderStr(){
     $('#gc').onchange=re;$('#gy').onchange=re;$('#gd').onchange=re}
 }
 
+/* ============================== render: 買い時（長期投資向け） ============================== */
+const BUY_HS=[20,60,125,250];
+function buyEval(){
+  const rows=timeline();const dates=rows.map(r=>r.date);
+  const tcol=S.target.col?colKey(S.target.ds,S.target.col):null;
+  const tv=tcol?rows.map(r=>r[tcol]):dates.map(()=>null);
+  const b=S.buy||{conds:[],dd:{on:false,days:250,th:0.10},cool:20};
+  const conds=[];
+  for(const c of (b.conds||[])){const ind=S.indicators.find(i=>i.id===c.ind);if(!ind)continue;
+    const iv=indSeries(ind);const zs=zscore(iv.map(p=>p.v));
+    conds.push({c,ind,m:new Map(iv.map((p,i)=>[p.date,zs[i]])),rm:new Map(iv.map(p=>[p.date,p.v])),
+      last:iv.length?{d:iv[iv.length-1].date,v:iv[iv.length-1].v,z:zs[zs.length-1]}:null})}
+  const ddArr=b.dd&&b.dd.on&&tcol?rows.map((_,i)=>{const w=[];
+    for(let j=Math.max(0,i-b.dd.days+1);j<=i;j++)if(tv[j]!=null)w.push(tv[j]);
+    const mx=w.length?Math.max(...w):null;return mx!=null&&tv[i]!=null?tv[i]/mx-1:null}):[];
+  const sig=dates.map((d,i)=>{let ok=conds.length>0||(b.dd&&b.dd.on);
+    for(const o of conds){const z=o.m.get(d);
+      if(z==null||!(o.c.op==='ge'?z>=+o.c.th:z<=-(+o.c.th))){ok=false;break}}
+    if(ok&&b.dd&&b.dd.on&&(ddArr[i]==null||ddArr[i]>-b.dd.th))ok=false;
+    return ok});
+  const eps=[];let last=-1e9;
+  sig.forEach((s,i)=>{if(!s)return;if(i-last>=Math.max(1,b.cool||20))eps.push(i);last=i});
+  return{rows,dates,tv,conds,ddArr,sig,eps,b}
+}
+function buyStat(E,H){ // エピソード開始日→H営業日後リターン vs 非シグナル日（Welch）
+  const ret=targetReturn(E.rows,colKey(S.target.ds,S.target.col),H);
+  const er=E.eps.map(i=>ret[i]).filter(v=>v!=null);
+  const br=ret.filter((v,i)=>v!=null&&!E.sig[i]);
+  let w=null;
+  if(er.length>=3&&br.length>=3){const v1=stdev(er)**2,v2=stdev(br)**2;
+    const se=Math.sqrt(v1/er.length+v2/br.length)||1e-9;const t=Math.abs((mean(er)-mean(br))/se);
+    const df=Math.max(1,(v1/er.length+v2/br.length)**2/((v1/er.length)**2/Math.max(1,er.length-1)+(v2/br.length)**2/Math.max(1,br.length-1)));
+    w={t,p:2*(1-tCdf(t,df))}}
+  return{h:H,er,m:er.length?mean(er):null,bm:br.length?mean(br):null,
+    win:er.length?er.filter(v=>v>0).length/er.length:null,w,n:er.length,ret}
+}
+function buyChart(host,E){
+  const dates=E.dates,tv=E.tv;
+  const W=640,H=300,pad={l:56,r:10,t:12,b:26};const s=svg(W,H);
+  const vs=tv.filter(v=>v!=null);if(!vs.length){host.replaceChildren(s);return}
+  const ym=Math.min(...vs),yM=Math.max(...vs);
+  const X=i=>pad.l+i/(dates.length-1||1)*(W-pad.l-pad.r),Y=v=>pad.t+(1-(v-ym)/(yM-ym||1))*(H-pad.t-pad.b);
+  for(const t of ticks(ym,yM)){s.appendChild(el('line',{x1:pad.l,y1:Y(t),x2:W-pad.r,y2:Y(t),stroke:'#eef0f3'}));s.appendChild(txt(pad.l-6,Y(t)+3,fmt(t,0),{'text-anchor':'end'}))}
+  const step=Math.max(1,Math.floor(dates.length/8));
+  dates.forEach((l,i)=>{if(i%step===0)s.appendChild(txt(X(i),H-pad.b+12,l.slice(2,7),{'text-anchor':'middle'}))});
+  let d='',started=false;
+  tv.forEach((v,i)=>{if(v==null){started=false;return}d+=(started?'L':'M')+X(i).toFixed(1)+' '+Y(v).toFixed(1);started=true});
+  s.appendChild(el('path',{d,fill:'none',stroke:'#1f6fd6','stroke-width':1.4}));
+  for(const i of E.eps){if(tv[i]==null)continue;
+    s.appendChild(el('circle',{cx:X(i),cy:Y(tv[i]),r:4.5,fill:'#0a7d4f',stroke:'#fff','stroke-width':1.2}))}
+  const li=dates.length-1;if(tv[li]!=null)s.appendChild(el('circle',{cx:X(li),cy:Y(tv[li]),r:5,fill:E.sig[li]?'#0a7d4f':'#c23030',stroke:'#fff','stroke-width':1.2}));
+  s.appendChild(txt(pad.l+4,pad.t+8,'● 緑=買いシグナル（エピソード開始日）／右端の点=最新日',{'font-size':9}));
+  host.replaceChildren(s);
+}
+function renderBuy(){
+  const el=$('#s-buy');
+  if(!S.target.col){el.innerHTML='<div class="panel"><p class="muted">データを取込みリターン対象を設定してください（データ画面）。</p></div>';return}
+  if(!S.buy)S.buy={conds:[],dd:{on:false,days:250,th:0.10},cool:20};
+  const b=S.buy,E=buyEval(),li=E.dates.length-1;
+  const cstat=E.conds.map(o=>{const z=o.last?o.last.z:null;
+    return{o,z,raw:o.last?o.last.v:null,at:o.last?o.last.d:'',ok:z!=null&&(o.c.op==='ge'?z>=+o.c.th:z<=-(+o.c.th))}});
+  const ddNow=E.ddArr.length?E.ddArr[li]:null;
+  const ddOK=b.dd&&b.dd.on?(ddNow!=null&&ddNow<=-b.dd.th):null;
+  const nC=E.conds.length+(b.dd&&b.dd.on?1:0),nOK=cstat.filter(x=>x.ok).length+(ddOK===true?1:0);
+  const hasRule=nC>0,on=hasRule&&nOK===nC;
+  const lastEp=E.eps.length?E.eps[E.eps.length-1]:null;
+  const stats=hasRule?BUY_HS.map(h=>buyStat(E,h)):[];
+  const condRows=b.conds.map((c,ci)=>{const ind=S.indicators.find(i=>i.id===c.ind);
+    return`<tr><td><select data-bi="${ci}" ${ind?'':'disabled'}>${S.indicators.map(i=>`<option value="${i.id}" ${i.id===c.ind?'selected':''}>${esc(i.name)}</option>`).join('')}</select>${ind?'':' <span class="badge b">指標削除済</span>'}</td>
+    <td><select data-bo="${ci}"><option value="ge" ${c.op==='ge'?'selected':''}>Z ≥</option><option value="le" ${c.op==='le'?'selected':''}>Z ≤ −</option></select></td>
+    <td><input type="number" step="0.1" data-bt="${ci}" value="${c.th}" style="width:5em"></td>
+    <td><button class="btn sm danger" data-bd="${ci}">削除</button></td></tr>`}).join('');
+  el.innerHTML=`
+  <div class="panel"><h2>買い時判定 — 長期投資の「暴落買い」ルール</h2>
+    <p class="note">条件を<b>すべて満たす日</b>を買いシグナルにします（例: 日経平均VIの Z≥1.5 かつ 高値から−10%超）。連続するシグナルは1つのエピソードにまとめ、開始日からの長期リターンで有効性を検証します。</p>
+    <table class="t"><thead><tr><th>指標（指標画面で作成）</th><th>方向</th><th>閾値</th><th></th></tr></thead>
+    <tbody>${condRows||'<tr><td colspan="4" class="muted">条件がありません。「＋指標条件を追加」か「高値からの下落」でルールを作ってください。</td></tr>'}</tbody></table>
+    <div class="row" style="margin-top:8px">
+      <button class="btn" id="badd" ${S.indicators.length?'':'disabled'}>＋指標条件を追加</button>
+      <label class="check"><input type="checkbox" id="bdd" ${b.dd&&b.dd.on?'checked':''}>高値からの下落条件を使う</label>
+      ${b.dd&&b.dd.on?`<label class="f">期間<input type="number" id="bddn" value="${b.dd.days}" style="width:5em">営業日</label>
+      <label class="f">下落率<input type="number" step="0.5" id="bddt" value="${b.dd.th*100}" style="width:5em">%超</label>`:''}
+      <label class="f">同一エピソードとみなす間隔<input type="number" id="bcool" value="${b.cool}" style="width:4.5em">日</label>
+    </div></div>
+  <div class="panel"><h3>現在の判定</h3>
+    ${!hasRule?'<p class="muted">条件が未設定です。上でルールを組んでください。</p>':`
+    <p style="margin:6px 0">${on?'<span class="badge g" style="font-size:15px">買い時シグナル発生中</span>':nOK>0?`<span class="badge w" style="font-size:15px">一部成立（${nOK}/${nC}）</span>`:'<span class="badge n" style="font-size:15px">シグナルなし（平常）</span>'}</p>
+    <table class="t"><thead><tr><th>条件</th><th>現在値</th><th>Z</th><th>判定</th></tr></thead><tbody>
+      ${cstat.map(x=>`<tr><td>${esc(x.o.ind.name)} ${x.o.c.op==='ge'?'Z ≥ '+x.o.c.th:'Z ≤ −'+x.o.c.th}</td>
+        <td class="num">${fmt(x.raw,2)}${x.at&&x.at<E.dates[li]?`<div class="small muted">${x.at}時点</div>`:''}</td><td class="num">${fmt(x.z,2)}</td><td>${x.ok?'<span class="badge g">成立</span>':'<span class="badge n">不成立</span>'}</td></tr>`).join('')}
+      ${b.dd&&b.dd.on?`<tr><td>高値(${b.dd.days}営業日)からの下落 ≤ −${b.dd.th*100}%</td><td class="num">${ddNow!=null?pct(ddNow,1):'—'}</td><td class="num">—</td><td>${ddOK?'<span class="badge g">成立</span>':'<span class="badge n">不成立</span>'}</td></tr>`:''}
+    </tbody></table>
+    <p class="note">直近の買いシグナル: ${lastEp!=null?E.dates[lastEp]+'（'+(li-lastEp)+'営業日前）':'なし'} ／ 最新日: ${E.dates[li]}</p>`}
+  </div>
+  ${hasRule?`
+  <div class="panel"><h3>検証 — 買いシグナル後のリターン（エピソード ${E.eps.length}回 / シグナル日 ${E.sig.filter(Boolean).length}日）</h3>
+    <table class="t"><thead><tr><th>期間</th><th>n</th><th>シグナル後平均</th><th>全日平均</th><th>差</th><th>勝率</th><th>p値</th></tr></thead><tbody>
+    ${stats.map(s=>`<tr><td>${s.h}営業日後</td><td class="num">${s.n}</td>
+      <td class="num" style="font-weight:600">${s.m!=null?pct(s.m):'—'}</td><td class="num">${s.bm!=null?pct(s.bm):'—'}</td>
+      <td class="num" style="color:${s.m!=null&&s.m-s.bm>0?'var(--good)':'var(--bad)'}">${s.m!=null?pct(s.m-s.bm):'—'}</td>
+      <td class="num">${s.win!=null?(s.win*100).toFixed(0)+'%':'—'}</td>
+      <td class="num">${s.w?fmt(s.w.p,3)+(s.w.p<0.05?' ◎':''):'n不足'}</td></tr>`).join('')}
+    </tbody></table>
+    <div id="ch-buy" style="margin-top:12px"></div>
+    <p class="note">p&lt;0.05なら偶然でない可能性。直近のエピソードはH日後が未来になるため集計から外れます。エピソード数が少ないほど結果は参考程度に。</p>
+  </div>
+  <div class="panel"><h3>エピソード明細（直近15回）</h3>
+    <table class="t"><thead><tr><th>開始日</th>${BUY_HS.map(h=>`<th>${h}日後</th>`).join('')}</tr></thead><tbody>
+    ${E.eps.slice(-15).reverse().map(i=>`<tr><td>${E.dates[i]}</td>${stats.map(s=>{const v=s.ret[i];return`<td class="num" style="color:${v==null?'':v>=0?'var(--good)':'var(--bad)'}">${v!=null?pct(v):'—'}</td>`}).join('')}</tr>`).join('')||'<tr><td colspan="5" class="muted">シグナル未発生。条件を緩めるかデータ期間を延ばしてください。</td></tr>'}
+    </tbody></table>
+    <p class="note">運用例: 全条件成立を「異常な恐怖」とみなして枠を分割投入（初回1/3・さらに悪化で追加）。「なぜ効くか」を演繹メモに残し、四半期ごとにローリングIC等で生存確認する運用が安全です。</p>
+  </div>`:''}`;
+  $$('#s-buy [data-bi]').forEach(s=>s.onchange=e=>{b.conds[+e.target.dataset.bi].ind=e.target.value;persist();renderAll()});
+  $$('#s-buy [data-bo]').forEach(s=>s.onchange=e=>{b.conds[+e.target.dataset.bo].op=e.target.value;persist();renderAll()});
+  $$('#s-buy [data-bt]').forEach(s=>s.onchange=e=>{b.conds[+e.target.dataset.bt].th=+e.target.value;persist();renderAll()});
+  $$('#s-buy [data-bd]').forEach(s=>s.onclick=e=>{b.conds.splice(+e.target.dataset.bd,1);persist();renderAll()});
+  const add=$('#badd');if(add)add.onclick=()=>{b.conds.push({ind:S.indicators[0].id,op:'ge',th:1.5});persist();renderAll()};
+  const ddc=$('#bdd');if(ddc)ddc.onchange=e=>{b.dd=b.dd||{days:250,th:0.10};b.dd.on=e.target.checked;persist();renderAll()};
+  const dn=$('#bddn');if(dn)dn.onchange=e=>{b.dd.days=+e.target.value||250;persist();renderAll()};
+  const dt=$('#bddt');if(dt)dt.onchange=e=>{b.dd.th=(+e.target.value||10)/100;persist();renderAll()};
+  const bc=$('#bcool');if(bc)bc.onchange=e=>{b.cool=+e.target.value||20;persist();renderAll()};
+  if(hasRule&&E.dates.length)buyChart($('#ch-buy'),E);
+}
+
 /* ============================== render: ガイド ============================== */
 function renderGui(){
   $('#s-gui').innerHTML=`
@@ -776,6 +903,7 @@ function renderGui(){
       <li><b>分析</b>：まず散布図。IC→累積リターン→分位別→分布→演繹考察の順で検証する。</li>
       <li><b>比較</b>：全指標を|IC|で一覧化して候補を絞る。</li>
       <li><b>ストラテジー</b>：閾値Zを決めて e/σ/N・最大DDを見て、運用目標と照合する。</li>
+      <li><b>買い時</b>：長期投資向け。「VIのZ≥1.5」「高値から−10%超」等の暴落ルールを組み、現在の判定とシグナル後20日〜1年のリターンを検証する。</li>
     </ol>
   </div>
   <div class="panel"><h2>判定の目安（ブログより）</h2>
@@ -794,6 +922,8 @@ function renderGui(){
       <tr><td>日経平均・日経平均VI</td><td>indexes.nikkei.co.jp →「データダウンロード」→ 日次データCSV</td><td>無料・直近約3年半・Shift-JIS</td></tr>
       <tr><td>VIX</td><td>cboe.com → VIX_History.csv</td><td>無料・1990年〜</td></tr>
       <tr><td>日経・S&P・FX等の長期価格</td><td>stooq.com → 例「^NKX」「^SPX」→ Historical Data → CSV</td><td>無料・数十年分・ブラウザから手動DL（古いイベント検証に必須）</td></tr>
+      <tr><td>日経平均の長期（指数算出以来）</td><td>Yahoo Finance「^N225」→ ヒストリカルデータ → 期間を最大に → ダウンロード</td><td>無料・ブラウザ操作・分割未調整</td></tr>
+      <tr><td>TOPIXの長期（日銀公式統計）</td><td>stat-search.boj.or.jp で「TOPIX」を検索 → 系列選択 → CSV出力</td><td>無料・公式・月次/日次の長期系列</td></tr>
       <tr><td>イベント履歴 2007〜2023/03（米・日・欧ほか）</td><td>github.com/EPSOFT/dataset-forexfactory → events.csv を Raw でDL → イベント取込</td><td>無料・7.2万件・予想/結果入り（FF由来の蓄積）</td></tr>
       <tr><td>毎週の経済カレンダー</td><td>nfs.faireconomy.media/ff_calendar_thisweek.xml を保存 → イベント取込</td><td>無料・予想/前回入り・毎週取込で2023年以降を蓄積</td></tr>
       <tr><td>将来の発表予定（〜2027）</td><td>economicium.com/data/economic-calendar.csv</td><td>無料・日付のみ（予想なし）</td></tr>
@@ -817,7 +947,7 @@ function renderGui(){
 /* ============================== app ============================== */
 function go(s){$$('#nav button').forEach(b=>b.classList.toggle('on',b.dataset.s===s));
   $$('section.screen').forEach(x=>x.classList.toggle('on',x.id==='s-'+s));
-  ({data:renderData,ind:renderInd,ana:renderAna,cmp:renderCmp,str:renderStr,gui:renderGui}[s])()}
+  ({data:renderData,ind:renderInd,ana:renderAna,cmp:renderCmp,str:renderStr,buy:renderBuy,gui:renderGui}[s])()}
 function renderAll(){const cur=$('#nav button.on').dataset.s;go(cur)}
 $$('#nav button').forEach(b=>b.onclick=()=>go(b.dataset.s));
 $('#btnExport').onclick=()=>{const blob=new Blob([JSON.stringify(S)],{type:'application/json'});
@@ -827,7 +957,7 @@ $('#btnImport').onclick=()=>$('#importJson').click();
 $('#importJson').onchange=async e=>{const f=e.target.files[0];if(!f)return;
   try{const o=JSON.parse(await f.text());Object.assign(S,o);persist();persistEv();renderAll()}catch(err){alert('読込失敗')}};
 /* console/testing API */
-window.App={S,analyze,csvToDataset,indSeries,seriesOf,timeline,eventStudy,matchEvents,parseEvents,addEvents,evSeries,evCurs,IND_TYPES,
+window.App={S,analyze,csvToDataset,indSeries,seriesOf,timeline,eventStudy,matchEvents,parseEvents,addEvents,evSeries,evCurs,IND_TYPES,buyEval,
   addDs:(name,text)=>{const d=csvToDataset(name,text);S.datasets.push(d);
   if(!S.target.col){const c=d.cols.find(c=>/終値|close/i.test(c.label))||d.cols[0];S.target={ds:d.id,col:c.key}}persist();renderAll();return d.id}};
 restore();renderAll();
